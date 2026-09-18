@@ -65,6 +65,10 @@ return [
         // default: ['default', 'variant']; [] keeps the block defaults
         'themes' => ['default', 'variant'],
 
+        // optional — block height when a background video/photo is set
+        // default: 'large' (auto|small|medium|large|fullscreen); null keeps the default
+        'backgroundHeight' => 'large',
+
         // optional — describes the website (topic, audience, voice);
         // sent along with every request
         'project' => 'Ergotherapy practice in Saarbrücken. We address parents and use a warm, professional tone.',

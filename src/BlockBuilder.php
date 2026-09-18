@@ -31,6 +31,7 @@ final class BlockBuilder
 {
     /**
      * @param list<string> $themes theme values to alternate between
+     * @param string|null $backgroundHeight block height when a background video/image is set
      */
     public function __construct(
         private readonly ModelWithContent $model,
@@ -38,6 +39,7 @@ final class BlockBuilder
         private readonly ?Pexels $pexels = null,
         private readonly ?string $language = null,
         private readonly array $themes = [],
+        private readonly ?string $backgroundHeight = null,
     ) {
     }
 
@@ -211,9 +213,9 @@ final class BlockBuilder
 
     /**
      * Background video (or photo as fallback) behind a block. Sets the
-     * background type, the file and — for legibility — a solid overlay
-     * unless the project already defines one. Without a match the block
-     * keeps its default background.
+     * background type, the file, a larger block height and — for
+     * legibility — a solid overlay unless the project already defines
+     * one. Without a match the block keeps its default background.
      */
     private function background(array &$content, string $type, mixed $value): void
     {
@@ -239,6 +241,12 @@ final class BlockBuilder
 
         if (array_key_exists('overlaytype', $content) && empty($content['overlaytype'])) {
             $content['overlaytype'] = 'solid';
+        }
+
+        // A background needs room to show.
+        $heights = array_column($this->catalog->allFields($type)['height']['options'] ?? [], 'value');
+        if ($this->backgroundHeight !== null && in_array($this->backgroundHeight, $heights, true)) {
+            $content['height'] = $this->backgroundHeight;
         }
     }
 

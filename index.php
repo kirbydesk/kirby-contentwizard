@@ -44,6 +44,10 @@ Kirby::plugin('kirbydesk/contentwizard', [
         // theme values). An empty list keeps every block on its default.
         'themes' => ['default', 'variant'],
 
+        // Block height (pagewizard `height` value) when the generator puts
+        // a video or photo behind a block, e.g. the hero. null keeps the default.
+        'backgroundHeight' => 'large',
+
         // Optional description of the website (topic, audience, voice)
         // that is sent along with every request.
         'project' => null,
@@ -154,7 +158,7 @@ Kirby::plugin('kirbydesk/contentwizard', [
                                 ], $brief);
 
                             $themes = (array) $kirby->option('kirbydesk.contentwizard.themes', []);
-                            $blocks = $generatedBlocks = (new BlockBuilder($model, $catalog, $pexels, $language?->code(), $themes))->build($result['blocks']);
+                            $blocks = $generatedBlocks = (new BlockBuilder($model, $catalog, $pexels, $language?->code(), $themes, $kirby->option('kirbydesk.contentwizard.backgroundHeight')))->build($result['blocks']);
 
                             if ($mode === 'append') {
                                 $existing = $model->content()->get('blocks')->toBlocks()->toArray();
