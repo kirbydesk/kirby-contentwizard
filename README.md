@@ -23,8 +23,8 @@ the hero gets a short background video and cards (cardlets) get photos:
 Claude describes a fitting scene, the plugin searches Pexels, adds the
 file to the page and fills alt text / title and the credit fields
 (creator, credit line, source, Pexels License). Media blocks are
-excluded by default (see `exclude`); remove `pwmedia` from the list to
-let the generator add photo blocks too.
+off by default; enable them under Project Wizard → AI → Blocks for the
+AI to let the generator add photo blocks too.
 
 Blocks that need links or other files (e.g. buttons, videos) are left
 out — Claude cannot provide them. Add those in the panel afterwards.
