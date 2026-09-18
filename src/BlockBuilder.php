@@ -23,24 +23,23 @@ use Throwable;
  * image cannot be found is left out; decorative images (e.g. on cards)
  * are simply skipped.
  *
- * Top-level blocks alternate between the configured themes (e.g.
- * default / variant) so the sections of the page stand apart; a block
- * with a background video keeps its default theme.
+ * Top-level blocks alternate between the project's AI themes (e.g.
+ * default / variant) so the sections of the page stand apart. A block
+ * with a background video/photo gets the theme that reads best on it.
+ * All of this follows the project's AI settings (Settings).
  */
 final class BlockBuilder
 {
-    /**
-     * @param list<string> $themes theme values to alternate between
-     * @param string|null $backgroundHeight block height when a background video/image is set
-     */
+    private readonly Settings $settings;
+
     public function __construct(
         private readonly ModelWithContent $model,
         private readonly BlockCatalog $catalog,
         private readonly ?Pexels $pexels = null,
         private readonly ?string $language = null,
-        private readonly array $themes = [],
-        private readonly ?string $backgroundHeight = null,
+        ?Settings $settings = null,
     ) {
+        $this->settings = $settings ?? new Settings([]);
     }
 
     /**
@@ -71,14 +70,15 @@ final class BlockBuilder
     /** @param list<array> $blocks top-level blocks */
     private function alternateThemes(array &$blocks): void
     {
-        if (count($this->themes) < 2) return;
+        $themes = $this->settings->themes();
+        if ($themes === []) return;
 
         $i = 0;
         foreach ($blocks as &$block) {
             if (!array_key_exists('theme', $block['content'])) continue;
             if (in_array($block['content']['backgroundtype'] ?? null, ['image', 'video'], true)) continue;
 
-            $theme   = $this->themes[$i++ % count($this->themes)];
+            $theme   = $themes[$i++ % count($themes)];
             $options = array_column($this->catalog->allFields($block['type'])['theme']['options'] ?? [], 'value');
             if (in_array($theme, $options, true)) $block['content']['theme'] = $theme;
         }
@@ -239,15 +239,36 @@ final class BlockBuilder
         $content[$spec['typeField']] = $kind;
         $content[$spec[$kind]]       = [$file->uuid()?->toString() ?? $file->filename()];
 
-        if (array_key_exists('overlaytype', $content) && empty($content['overlaytype'])) {
-            $content['overlaytype'] = 'solid';
-        }
+        $fields    = $this->catalog->allFields($type);
+        $optionsOf = fn (string $name) => array_column($fields[$name]['options'] ?? [], 'value');
 
         // A background needs room to show.
-        $heights = array_column($this->catalog->allFields($type)['height']['options'] ?? [], 'value');
-        if ($this->backgroundHeight !== null && in_array($this->backgroundHeight, $heights, true)) {
-            $content['height'] = $this->backgroundHeight;
+        $height = $this->settings->get('backgroundHeight');
+        if (in_array($height, $optionsOf('height'), true)) $content['height'] = $height;
+
+        // Overlay for legibility (black, pagewizard hero effects tab).
+        $overlay   = $this->settings->get('backgroundOverlay');
+        $intensity = $this->settings->get('backgroundOverlayIntensity');
+        if (in_array($overlay, $optionsOf('overlaytype'), true)) {
+            $content['overlaytype'] = $overlay;
+            $key = $overlay === 'gradient' ? 'overlaygradientintensity' : 'overlayintensity';
+            if (array_key_exists($key, $content)) $content[$key] = $intensity;
+        } elseif ($overlay === 'none' && array_key_exists('overlaytype', $content)) {
+            $content['overlaytype'] = null;
         }
+
+        // Theme: fixed, or the one whose text reads best on the background.
+        $themes = array_values(array_diff($optionsOf('theme'), ['custom']));
+        $choice = $this->settings->get('backgroundTheme');
+        if ($choice === 'auto') {
+            if ($this->pexels->luminance !== null) {
+                $behind = ThemeContrast::withOverlay($this->pexels->luminance, (string) ($content['overlaytype'] ?? ''), (int) $intensity);
+                $choice = ThemeContrast::best($behind, $themes);
+            } else {
+                $choice = null;
+            }
+        }
+        if ($choice !== null && in_array($choice, $themes, true)) $content['theme'] = $choice;
     }
 
     /**

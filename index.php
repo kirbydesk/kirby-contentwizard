@@ -1,6 +1,7 @@
 <?php
 
 use Kirby\Cms\App;
+use Kirby\Cms\Blueprint;
 use Kirby\Cms\Find;
 use Kirby\Cms\Page;
 use Kirby\Exception\InvalidArgumentException;
@@ -9,6 +10,8 @@ use Kirbydesk\Contentwizard\BlockBuilder;
 use Kirbydesk\Contentwizard\BlockCatalog;
 use Kirbydesk\Contentwizard\Generator;
 use Kirbydesk\Contentwizard\Pexels;
+use Kirbydesk\Contentwizard\Settings;
+use Kirbydesk\Contentwizard\ThemeContrast;
 
 @include_once __DIR__ . '/vendor/autoload.php';
 // PSR-4 fallback for local (unlinked) install
@@ -28,30 +31,120 @@ function _contentwizard_supports($model): bool
     return $model instanceof Page && $model->blueprint()->field('blocks') !== null;
 }
 
+function _contentwizard_key(string $option, string $env): ?string
+{
+    $key = App::instance()->option('kirbydesk.contentwizard.' . $option) ?: getenv($env);
+    return is_string($key) && $key !== '' ? $key : null;
+}
+
+/**
+ * Form for the Project Wizard's "AI" tab: Kirby field definitions plus
+ * the stored values. The Project Wizard renders it with <k-form>.
+ */
+function _contentwizard_settings_form(): array
+{
+    $settings = (new Settings())->all();
+
+    $blocks = [];
+    foreach (pwConfig::projectConfig('blocks') as $type) {
+        try {
+            $name = Blueprint::find('blocks/' . $type)['name'] ?? $type;
+        } catch (Throwable) {
+            continue;
+        }
+        $blocks[] = ['value' => $type, 'text' => t($name, $type)];
+    }
+
+    $themes = array_map(fn ($theme) => ['value' => $theme, 'text' => t('pw.option.' . $theme, $theme)], ThemeContrast::THEMES);
+
+    $fields = [
+        'headlineContent' => ['type' => 'headline', 'label' => t('contentwizard.settings.content', 'Content')],
+        'project' => [
+            'type'    => 'textarea',
+            'label'   => t('contentwizard.settings.project', 'Project and voice'),
+            'help'    => t('contentwizard.settings.project.help', 'What the website is about, who it addresses and how it speaks. Sent along with every generated page.'),
+            'buttons' => false,
+            'size'    => 'small',
+        ],
+        'rules' => [
+            'type'    => 'textarea',
+            'label'   => t('contentwizard.settings.rules', 'Writing rules'),
+            'help'    => t('contentwizard.settings.rules.help', 'One rule per line, e.g. “Explain technical terms briefly.”'),
+            'buttons' => false,
+            'size'    => 'small',
+        ],
+        'blocks' => [
+            'type'    => 'checkboxes',
+            'label'   => t('contentwizard.settings.blocks', 'Blocks for the AI'),
+            'help'    => t('contentwizard.settings.blocks.help', 'Blocks that need links or files the AI cannot provide are left out automatically.'),
+            'options' => $blocks,
+            'columns' => 3,
+        ],
+
+        'headlineThemes' => ['type' => 'headline', 'label' => t('contentwizard.settings.themes', 'Sections')],
+        'themeA' => [
+            'type'    => 'select',
+            'label'   => t('contentwizard.settings.themeA', 'Theme of the sections'),
+            'options' => $themes,
+            'empty'   => false,
+            'width'   => '1/2',
+        ],
+        'themeB' => [
+            'type'    => 'select',
+            'label'   => t('contentwizard.settings.themeB', 'Alternating with'),
+            'help'    => t('contentwizard.settings.themeB.help', 'Leave empty to keep all sections on one theme.'),
+            'options' => $themes,
+            'width'   => '1/2',
+        ],
+
+        'headlineBackground' => ['type' => 'headline', 'label' => t('contentwizard.settings.background', 'Background video / photo (hero)')],
+        'backgroundHeight' => [
+            'type'    => 'toggles',
+            'label'   => t('contentwizard.settings.backgroundHeight', 'Height'),
+            'options' => array_map(fn ($v) => ['value' => $v, 'text' => t('pw.option.' . $v, $v)], ['auto', 'small', 'medium', 'large', 'fullscreen']),
+        ],
+        'backgroundOverlay' => [
+            'type'    => 'toggles',
+            'label'   => t('contentwizard.settings.backgroundOverlay', 'Overlay'),
+            'options' => array_map(fn ($v) => ['value' => $v, 'text' => t('pw.option.' . $v, $v)], ['none', 'solid', 'gradient']),
+            'width'   => '1/2',
+        ],
+        'backgroundOverlayIntensity' => [
+            'type'  => 'range',
+            'label' => t('contentwizard.settings.backgroundOverlayIntensity', 'Overlay intensity'),
+            'min'   => 0,
+            'max'   => 100,
+            'step'  => 5,
+            'after' => '%',
+            'width' => '1/2',
+        ],
+        'backgroundTheme' => [
+            'type'    => 'select',
+            'label'   => t('contentwizard.settings.backgroundTheme', 'Theme on the background'),
+            'help'    => t('contentwizard.settings.backgroundTheme.help', 'Automatic: the theme whose text reads best on the video or photo (its measured brightness, darkened by the overlay).'),
+            'options' => array_merge([['value' => 'auto', 'text' => t('contentwizard.settings.auto', 'Automatic (best contrast)')]], $themes),
+            'empty'   => false,
+        ],
+    ];
+
+    $value = $settings;
+    $value['blocks'] = array_values(array_diff(array_column($blocks, 'value'), $settings['exclude']));
+    unset($value['exclude']);
+
+    return ['fields' => $fields, 'value' => $value];
+}
+
 Kirby::plugin('kirbydesk/contentwizard', [
     'options' => [
         'anthropic.apiKey' => null,
         'model'            => 'claude-opus-5',
 
-        // Optional: Pexels API key. With it, media blocks get stock photos.
+        // Optional: Pexels API key for the hero's background video and
+        // photos on cards.
         'pexels.apiKey' => null,
 
-        // Block types the generator never uses: column layouts and media
-        // blocks are better arranged by hand, a standalone heading adds
-        // nothing to a generated page (every block has its own heading).
-        'exclude' => ['pwmulticolumn', 'pwheading', 'pwmedia'],
-
-        // Themes the generated sections alternate between (pagewizard
-        // theme values). An empty list keeps every block on its default.
-        'themes' => ['default', 'variant'],
-
-        // Block height (pagewizard `height` value) when the generator puts
-        // a video or photo behind a block, e.g. the hero. null keeps the default.
-        'backgroundHeight' => 'large',
-
-        // Optional description of the website (topic, audience, voice)
-        // that is sent along with every request.
-        'project' => null,
+        // Everything else — voice, rules, blocks, themes, background —
+        // is set per project in the Project Wizard ("AI" tab).
 
         // Entry for pagewizard's shared "AI" view button. Pages are
         // written in the default language; translatewizard handles the rest.
@@ -73,6 +166,33 @@ Kirby::plugin('kirbydesk/contentwizard', [
         },
     ],
 
+    'api' => [
+        'routes' => [
+            [
+                'pattern' => 'contentwizard/settings',
+                'method'  => 'GET',
+                'action'  => fn () => _contentwizard_settings_form(),
+            ],
+            [
+                'pattern' => 'contentwizard/settings',
+                'method'  => 'POST',
+                'action'  => function () {
+                    $kirby = App::instance();
+                    if ($kirby->user()?->role()->permissions()->for('site', 'update') !== true) {
+                        throw new PermissionException(message: 'Not allowed.');
+                    }
+
+                    $input = $kirby->request()->body()->toArray();
+                    $all   = array_column(_contentwizard_settings_form()['fields']['blocks']['options'], 'value');
+                    $input['exclude'] = array_values(array_diff($all, (array) ($input['blocks'] ?? [])));
+
+                    Settings::write($input);
+                    return _contentwizard_settings_form();
+                },
+            ],
+        ],
+    ],
+
     'areas' => [
         'site' => function () {
             return [
@@ -84,12 +204,12 @@ Kirby::plugin('kirbydesk/contentwizard', [
 
                             $fields = [
                                 'brief' => [
-                                    'type'        => 'textarea',
-                                    'label'       => t('contentwizard.dialog.brief', 'What should the page be about?'),
-                                    'help'        => t('contentwizard.dialog.brief.help', 'Topic, audience, sections you want, tone …'),
-                                    'buttons'     => false,
-                                    'size'        => 'medium',
-                                    'required'    => true,
+                                    'type'     => 'textarea',
+                                    'label'    => t('contentwizard.dialog.brief', 'What should the page be about?'),
+                                    'help'     => t('contentwizard.dialog.brief.help', 'Topic, audience, sections you want, tone …'),
+                                    'buttons'  => false,
+                                    'size'     => 'medium',
+                                    'required' => true,
                                 ],
                             ];
 
@@ -130,8 +250,8 @@ Kirby::plugin('kirbydesk/contentwizard', [
                                 throw new PermissionException(message: 'Not allowed.');
                             }
 
-                            $apiKey = $kirby->option('kirbydesk.contentwizard.anthropic.apiKey') ?: getenv('ANTHROPIC_API_KEY');
-                            if (!is_string($apiKey) || $apiKey === '') {
+                            $apiKey = _contentwizard_key('anthropic.apiKey', 'ANTHROPIC_API_KEY');
+                            if ($apiKey === null) {
                                 throw new InvalidArgumentException(message: 'No Anthropic API key configured (kirbydesk.contentwizard.anthropic.apiKey).');
                             }
 
@@ -145,21 +265,23 @@ Kirby::plugin('kirbydesk/contentwizard', [
                             // Writing a page takes a while.
                             @set_time_limit(300);
 
-                            $language = $kirby->defaultLanguage() ?? $kirby->language();
-                            $pexelsKey = $kirby->option('kirbydesk.contentwizard.pexels.apiKey') ?: getenv('PEXELS_API_KEY');
-                            $pexels    = is_string($pexelsKey) && $pexelsKey !== '' ? new Pexels($pexelsKey) : null;
-                            $catalog   = new BlockCatalog($model, (array) $kirby->option('kirbydesk.contentwizard.exclude', []), $pexels !== null);
+                            $settings  = new Settings();
+                            $language  = $kirby->defaultLanguage() ?? $kirby->language();
+                            $pexelsKey = _contentwizard_key('pexels.apiKey', 'PEXELS_API_KEY');
+                            $pexels    = $pexelsKey !== null ? new Pexels($pexelsKey) : null;
+                            $catalog   = new BlockCatalog($model, $settings->exclude(), $pexels !== null);
 
                             $result = (new Generator($apiKey, (string) $kirby->option('kirbydesk.contentwizard.model', 'claude-opus-5')))
                                 ->generate($catalog->blocks(), [
                                     'language' => $language?->name() ?? 'English',
                                     'title'    => $model->title()->value(),
                                     'path'     => $model->parents()->flip()->pluck('title'),
-                                    'project'  => $kirby->option('kirbydesk.contentwizard.project'),
+                                    'project'  => $settings->get('project'),
+                                    'rules'    => $settings->rules(),
                                 ], $brief);
 
-                            $themes = (array) $kirby->option('kirbydesk.contentwizard.themes', []);
-                            $blocks = $generatedBlocks = (new BlockBuilder($model, $catalog, $pexels, $language?->code(), $themes, $kirby->option('kirbydesk.contentwizard.backgroundHeight')))->build($result['blocks']);
+                            $blocks = $generated = (new BlockBuilder($model, $catalog, $pexels, $language?->code(), $settings))
+                                ->build($result['blocks']);
 
                             if ($mode === 'append') {
                                 $existing = $model->content()->get('blocks')->toBlocks()->toArray();
@@ -173,12 +295,23 @@ Kirby::plugin('kirbydesk/contentwizard', [
                                 $update['metadescription'] = $meta;
                             }
 
-                            $model->update($update, $language?->code());
+                            $model = $model->update($update, $language?->code());
+
+                            // Replacing drops the previous content: remove its
+                            // Pexels files unless the new blocks still use them.
+                            if ($mode === 'replace') {
+                                $used = json_encode($model->content($language?->code())->toArray());
+                                foreach ($model->files() as $file) {
+                                    if (!str_contains($file->filename(), '-pexels-')) continue;
+                                    if (str_contains($used, $file->filename()) || str_contains($used, (string) $file->uuid()?->toString())) continue;
+                                    $file->delete();
+                                }
+                            }
 
                             return [
                                 'event'   => 'model.update',
                                 'message' => tt('contentwizard.result.done', '{count} block(s) created.', [
-                                    'count' => count($generatedBlocks),
+                                    'count' => count($generated),
                                 ]),
                             ];
                         },

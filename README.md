@@ -43,48 +43,44 @@ composer require kirbydesk/kirby-contentwizard
 
 ## Configuration
 
+API keys and the model go into `site/config/config.php` — they belong to
+the server:
+
 ```php
-// site/config/config.php
 return [
     'kirbydesk.contentwizard' => [
-        'anthropic' => [
-            'apiKey' => 'sk-ant-…',
-        ],
-
-        // optional — stock photos for media blocks
-        'pexels' => [
-            'apiKey' => '…',
-        ],
-
-        // optional — default: claude-opus-5
-        'model' => 'claude-opus-5',
-
-        // optional — block types the generator never uses
-        // default: ['pwmulticolumn', 'pwheading', 'pwmedia'] (columns and
-        // media are arranged by hand; every block has its own heading)
-        'exclude' => ['pwmulticolumn', 'pwheading', 'pwmedia'],
-
-        // optional — themes the generated sections alternate between
-        // default: ['default', 'variant']; [] keeps the block defaults
-        'themes' => ['default', 'variant'],
-
-        // optional — block height when a background video/photo is set
-        // default: 'large' (auto|small|medium|large|fullscreen); null keeps the default
-        'backgroundHeight' => 'large',
-
-        // optional — describes the website (topic, audience, voice);
-        // sent along with every request
-        'project' => 'Ergotherapy practice in Saarbrücken. We address parents and use a warm, professional tone.',
+        'anthropic' => ['apiKey' => 'sk-ant-…'],
+        'pexels'    => ['apiKey' => '…'],   // optional: background videos, card photos
+        'model'     => 'claude-opus-5',      // optional, default
     ],
 ];
 ```
 
-Without `anthropic.apiKey` / `pexels.apiKey`, the environment variables
-`ANTHROPIC_API_KEY` / `PEXELS_API_KEY` are used. Keep the key out of version control (e.g. in an env file or a
-git-ignored config).
+Without the keys, the environment variables `ANTHROPIC_API_KEY` /
+`PEXELS_API_KEY` are used. Keep them out of version control (e.g. in a
+git-ignored `.env`).
 
 With `claude-opus-5`, server-side refusal fallbacks are enabled: if the
 model declines a request, the API retries it on a fallback model.
+
+### AI defaults per project
+
+Everything else is set per project in the **Project Wizard → AI** tab
+(requires kirby-projectwizard 1.0.85+) and stored in
+`content/.projectwizard/contentwizard.json`:
+
+- **Project and voice** — what the website is about, who it addresses,
+  how it speaks. Sent along with every page.
+- **Writing rules** — one per line.
+- **Blocks for the AI** — default: all enabled blocks except multi-column,
+  heading and media.
+- **Sections** — two themes the generated sections alternate between.
+- **Background video / photo (hero)** — height, overlay and theme. The
+  theme is chosen **automatically** by default: the plugin measures the
+  brightness of the video (preview image) or photo (Pexels' average
+  colour), darkens it by the black overlay and picks the theme whose
+  heading colour has the best contrast. Themes and colours are read from
+  the Project Wizard, so this works with every project's variants.
 
 ### Panel button
 
@@ -121,4 +117,6 @@ composer install   # installs the Anthropic PHP SDK into vendor/
 - `src/BlockCatalog.php` — reads enabled blocks and their content fields
 - `src/Generator.php` — builds prompt + JSON schema, calls Claude (streaming)
 - `src/BlockBuilder.php` — turns the answer into Kirby block data with blueprint defaults
-- `src/Pexels.php` — finds a photo and adds it to the page with credit fields
+- `src/Pexels.php` — finds a photo/video, adds it with credit fields, measures its brightness
+- `src/Settings.php` — the project's AI defaults (Project Wizard → AI)
+- `src/ThemeContrast.php` — picks the theme with the best contrast on a background

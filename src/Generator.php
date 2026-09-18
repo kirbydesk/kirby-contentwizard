@@ -46,7 +46,7 @@ final class Generator
 
     /**
      * @param list<array> $catalog BlockCatalog::blocks()
-     * @param array{language: string, title: string, path: list<string>, project: ?string} $page
+     * @param array{language: string, title: string, path: list<string>, project: ?string, rules?: list<string>} $page
      */
     public function generate(array $catalog, array $page, string $brief): array
     {
@@ -119,6 +119,8 @@ final class Generator
 
         $blocks = implode("\n", array_map(fn ($entry) => $this->describeBlock($entry), $catalog));
 
+        $rules = implode('', array_map(fn ($rule) => "\n        - " . $rule, $page['rules'] ?? []));
+
         return <<<PROMPT
         You write the content of a web page for a website built with Kirby CMS and the pagewizard block system.
 
@@ -141,7 +143,7 @@ final class Generator
         - Do not invent facts that only the website owner can know — prices, opening hours, addresses, names, phone numbers, statistics. Write around them or phrase them generally.
         - Never invent quotes, testimonials or reviews. Use a quote block only for a quote the editor provides in the description.
         - For photos, give English search terms for a stock photo: a plausible, concrete scene that supports the text (people, hands, objects, setting), a different scene for each photo on the page. Use at most one or two media blocks per page, if media blocks are available. The photos are generic stock images: the text around them must not claim that they show the website owner, their team or their premises.
-        - A background is a short, calm stock video behind the opening block's text; give English search terms for footage that sets the mood of the topic.
+        - A background is a short, calm stock video behind the opening block's text; give English search terms for footage that sets the mood of the topic.{$rules}
 
         Also write a meta description for search engines: one or two sentences, at most 155 characters.
         PROMPT;

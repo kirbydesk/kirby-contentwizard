@@ -26,6 +26,12 @@ final class Pexels
     private const VIDEO_MAX_DURATION = 30;
     private const VIDEO_WIDTH        = 1280;
 
+    /**
+     * Relative luminance (0–1) of the last attached photo/video, measured
+     * from Pexels' average colour or the video's preview image.
+     */
+    public ?float $luminance = null;
+
     public function __construct(
         private readonly string $apiKey,
     ) {
@@ -45,6 +51,7 @@ final class Pexels
         if (!is_string($url)) return null;
 
         $creator = (string) ($photo['photographer'] ?? '');
+        $this->luminance = is_string($photo['avg_color'] ?? null) ? ThemeContrast::luminance($photo['avg_color']) : null;
 
         return $this->store($page, $url, Str::slug($query) . '-pexels-' . ($photo['id'] ?? uniqid()) . '.jpg', $template, [
             'imagetitle'       => $alt,
@@ -68,6 +75,8 @@ final class Pexels
             $file = self::videoFile($video['video_files'] ?? []);
             if ($file === null) continue;
 
+            $this->luminance = is_string($video['image'] ?? null) ? self::measure($video['image']) : null;
+
             return $this->store($page, $file['link'], Str::slug($query) . '-pexels-' . ($video['id'] ?? uniqid()) . '.mp4', 'pwVideo', [
                 'videotitle'       => $title,
                 'videodescription' => $title,
@@ -75,6 +84,29 @@ final class Pexels
         }
 
         return null;
+    }
+
+    /** Average luminance of an image URL (GD), or null. */
+    private static function measure(string $url): ?float
+    {
+        if (!function_exists('imagecreatefromstring')) return null;
+
+        try {
+            $response = Remote::get($url, ['timeout' => 15]);
+            if ($response->code() !== 200) return null;
+
+            $image = @imagecreatefromstring($response->content());
+            if ($image === false) return null;
+
+            // Scale down to one pixel: its colour is the average.
+            $pixel = imagecreatetruecolor(1, 1);
+            imagecopyresampled($pixel, $image, 0, 0, 0, 0, 1, 1, imagesx($image), imagesy($image));
+            $rgb = imagecolorat($pixel, 0, 0);
+
+            return ThemeContrast::channelLuminance((($rgb >> 16) & 0xFF) / 255, (($rgb >> 8) & 0xFF) / 255, ($rgb & 0xFF) / 255);
+        } catch (Throwable) {
+            return null;
+        }
     }
 
     /** Smallest MP4 at least VIDEO_WIDTH wide, else the widest below it. */
