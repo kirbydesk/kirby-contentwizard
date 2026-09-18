@@ -36,9 +36,10 @@ Kirby::plugin('kirbydesk/contentwizard', [
         // Optional: Pexels API key. With it, media blocks get stock photos.
         'pexels.apiKey' => null,
 
-        // Block types the generator never uses. Multi-column layouts make
-        // the response schema too large and are better arranged by hand.
-        'exclude' => ['pwmulticolumn'],
+        // Block types the generator never uses: column layouts are better
+        // arranged by hand, a standalone heading adds nothing to a
+        // generated page (every block has its own heading).
+        'exclude' => ['pwmulticolumn', 'pwheading'],
 
         // Themes the generated sections alternate between (pagewizard
         // theme values). An empty list keeps every block on its default.

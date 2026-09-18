@@ -58,8 +58,9 @@ return [
         'model' => 'claude-opus-5',
 
         // optional — block types the generator never uses
-        // default: ['pwmulticolumn'] (column layouts are arranged by hand)
-        'exclude' => ['pwmulticolumn'],
+        // default: ['pwmulticolumn', 'pwheading'] (column layouts are
+        // arranged by hand; every block has its own heading)
+        'exclude' => ['pwmulticolumn', 'pwheading'],
 
         // optional — themes the generated sections alternate between
         // default: ['default', 'variant']; [] keeps the block defaults
