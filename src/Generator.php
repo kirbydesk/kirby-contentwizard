@@ -115,8 +115,9 @@ final class Generator
         - Headings are short. Taglines are a few words that lead into the heading.
         - Leave a field empty ("") when the block reads better without it.
         - Do not invent facts that only the website owner can know — prices, opening hours, addresses, names, phone numbers, statistics. Write around them or phrase them generally.
+        - Never invent quotes, testimonials or reviews. Use a quote block only for a quote the editor provides in the description.
         - Fields described as HTML may only use <p>, <strong>, <em>, <ul>, <ol> and <li>. Plain-text fields contain no markup; separate paragraphs there with a blank line.
-        - Where a block takes a photo, a stock photo is searched with the terms you give. Describe a plausible, concrete scene that supports the text (people, hands, objects, setting) rather than an abstract idea. Use one or two photo blocks on a page, not more.
+        - Where a block takes a photo, a stock photo is searched with the terms you give. Describe a plausible, concrete scene that supports the text (people, hands, objects, setting) rather than an abstract idea. Use one or two photo blocks on a page, not more. The photo is a generic stock image: the text around it must not claim that it shows the website owner, their team or their premises.
 
         Also write a meta description for search engines: one or two sentences, at most 155 characters.
         PROMPT;
