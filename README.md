@@ -18,11 +18,13 @@ the blocks that are enabled in the project.
   Use [kirby-translatewizard](https://github.com/kirbydesk/kirby-translatewizard)
   for the other languages.
 
-**Photos from Pexels.** With a [Pexels API key](https://www.pexels.com/api/),
-media blocks are included: Claude describes a fitting scene, the plugin
-searches Pexels, adds the photo to the page and fills alt text and the
-credit fields (photographer, credit line, source, Pexels License).
-Without a key, media blocks are left out.
+**Photos and videos from Pexels.** With a [Pexels API key](https://www.pexels.com/api/),
+the hero gets a short background video and cards (cardlets) get photos:
+Claude describes a fitting scene, the plugin searches Pexels, adds the
+file to the page and fills alt text / title and the credit fields
+(creator, credit line, source, Pexels License). Media blocks are
+excluded by default (see `exclude`); remove `pwmedia` from the list to
+let the generator add photo blocks too.
 
 Blocks that need links or other files (e.g. buttons, videos) are left
 out — Claude cannot provide them. Add those in the panel afterwards.
@@ -58,9 +60,9 @@ return [
         'model' => 'claude-opus-5',
 
         // optional — block types the generator never uses
-        // default: ['pwmulticolumn', 'pwheading'] (column layouts are
-        // arranged by hand; every block has its own heading)
-        'exclude' => ['pwmulticolumn', 'pwheading'],
+        // default: ['pwmulticolumn', 'pwheading', 'pwmedia'] (columns and
+        // media are arranged by hand; every block has its own heading)
+        'exclude' => ['pwmulticolumn', 'pwheading', 'pwmedia'],
 
         // optional — themes the generated sections alternate between
         // default: ['default', 'variant']; [] keeps the block defaults

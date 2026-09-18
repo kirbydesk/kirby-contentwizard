@@ -142,7 +142,7 @@ final class Generator
         - Short fields (marked "short") are plain text without markup. Rich-text fields (marked "rich text") are HTML using only <p>, <strong>, <em>, <ul>, <ol> and <li>.
         - Do not invent facts that only the website owner can know — prices, opening hours, addresses, names, phone numbers, statistics. Write around them or phrase them generally.
         - Never invent quotes, testimonials or reviews. Use a quote block only for a quote the editor provides in the description.
-        - For photos, give English search terms for a stock photo: a plausible, concrete scene that supports the text (people, hands, objects, setting), a different scene for each photo on the page. Use at most one or two media blocks per page. The photos are generic stock images: the text around them must not claim that they show the website owner, their team or their premises.
+        - For photos, give English search terms for a stock photo: a plausible, concrete scene that supports the text (people, hands, objects, setting), a different scene for each photo on the page. Use at most one or two media blocks per page, if media blocks are available. The photos are generic stock images: the text around them must not claim that they show the website owner, their team or their premises.
         - A background is a short, calm stock video behind the opening block's text; give English search terms for footage that sets the mood of the topic.
 
         Also write a meta description for search engines: one or two sentences, at most 155 characters.
