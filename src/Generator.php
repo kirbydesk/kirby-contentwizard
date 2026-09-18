@@ -38,8 +38,6 @@ final class Generator
     /** Models that support server-side refusal fallbacks ("default" routing). */
     private const FALLBACK_MODELS = ['claude-opus-5', 'claude-fable-5-1'];
 
-    private const RICH = ['pweditor', 'html', 'textarea'];
-
     public function __construct(
         private readonly string $apiKey,
         private readonly string $model,
