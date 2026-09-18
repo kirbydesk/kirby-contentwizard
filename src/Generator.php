@@ -84,6 +84,7 @@ final class Generator
                 $this->usage = [
                     'input'  => ($event->usage->inputTokens ?? 0) + ($event->usage->cacheReadInputTokens ?? 0) + ($event->usage->cacheCreationInputTokens ?? 0),
                     'output' => $event->usage->outputTokens,
+                    'stop'   => $stopReason,
                 ];
             }
         }

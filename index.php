@@ -300,10 +300,13 @@ Kirby::plugin('kirbydesk/contentwizard', [
                             // Replacing drops the previous content: remove its
                             // Pexels files unless the new blocks still use them.
                             if ($mode === 'replace') {
-                                $used = json_encode($model->content($language?->code())->toArray());
+                                // Nested blocks are stored as JSON strings, so
+                                // references appear escaped — match the bare id.
+                                $used = stripslashes(json_encode($model->content($language?->code())->toArray(), JSON_UNESCAPED_SLASHES));
                                 foreach ($model->files() as $file) {
                                     if (!str_contains($file->filename(), '-pexels-')) continue;
-                                    if (str_contains($used, $file->filename()) || str_contains($used, (string) $file->uuid()?->toString())) continue;
+                                    $id = $file->uuid()?->id();
+                                    if (str_contains($used, $file->filename()) || ($id !== null && str_contains($used, $id))) continue;
                                     $file->delete();
                                 }
                             }
