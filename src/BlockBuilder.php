@@ -5,6 +5,7 @@ namespace Kirbydesk\Contentwizard;
 use Kirby\Cms\Blueprint;
 use Kirby\Cms\Fieldset;
 use Kirby\Cms\ModelWithContent;
+use Kirby\Cms\Page;
 use Kirby\Form\Form;
 use Kirby\Toolkit\Str;
 use Throwable;
@@ -15,13 +16,16 @@ use Throwable;
  * an editor adds a block — so layout and style follow the project
  * settings. The generated text is then put into the content fields;
  * pagewizard's own field types get their JSON envelope (pwtext:
- * align/level/size, pweditor: mode/align/size).
+ * align/level/size, pweditor: mode/align/size). Image fields are filled
+ * from Pexels; a block whose image cannot be found is left out.
  */
 final class BlockBuilder
 {
     public function __construct(
         private readonly ModelWithContent $model,
         private readonly BlockCatalog $catalog,
+        private readonly ?Pexels $pexels = null,
+        private readonly ?string $language = null,
     ) {
     }
 
@@ -56,6 +60,14 @@ final class BlockBuilder
         $fields = $this->catalog->contentFields($type);
         foreach ($item['content'] ?? [] as $name => $value) {
             if (!isset($fields[$name])) continue;
+
+            if (($fields[$name]['type'] ?? null) === 'files') {
+                $image = $this->image($value);
+                if ($image === null) return null;
+                $content[$name] = [$image];
+                continue;
+            }
+
             $content[$name] = $this->value($fields[$name], $value);
         }
 
@@ -96,6 +108,23 @@ final class BlockBuilder
             default:
                 return is_scalar($value) ? (string) $value : '';
         }
+    }
+
+    /**
+     * Fetch the photo for an image field; returns the file reference to
+     * store in the files field, or null.
+     */
+    private function image(mixed $value): ?string
+    {
+        if ($this->pexels === null || !$this->model instanceof Page || !is_array($value)) return null;
+
+        $query = trim((string) ($value['query'] ?? ''));
+        if ($query === '') return null;
+
+        $file = $this->pexels->attach($this->model, $query, trim((string) ($value['alt'] ?? '')), (string) $this->language);
+        if ($file === null) return null;
+
+        return $file->uuid()?->toString() ?? $file->filename();
     }
 
     private static function json(array $data): string

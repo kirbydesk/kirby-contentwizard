@@ -21,6 +21,9 @@ use RuntimeException;
  */
 final class Generator
 {
+    /** Token usage of the last request: input, output (for logging/cost). */
+    public array $usage = [];
+
     /** Models that support server-side refusal fallbacks ("default" routing). */
     private const FALLBACK_MODELS = ['claude-opus-5', 'claude-fable-5-1'];
 
@@ -65,8 +68,12 @@ final class Generator
         foreach ($stream as $event) {
             if ($event instanceof BetaRawContentBlockDeltaEvent && $event->delta instanceof BetaTextDelta) {
                 $json .= $event->delta->text;
-            } elseif ($event instanceof BetaRawMessageDeltaEvent && $event->delta->stopReason !== null) {
-                $stopReason = $event->delta->stopReason;
+            } elseif ($event instanceof BetaRawMessageDeltaEvent) {
+                $stopReason  = $event->delta->stopReason ?? $stopReason;
+                $this->usage = [
+                    'input'  => ($event->usage->inputTokens ?? 0) + ($event->usage->cacheReadInputTokens ?? 0) + ($event->usage->cacheCreationInputTokens ?? 0),
+                    'output' => $event->usage->outputTokens,
+                ];
             }
         }
 
@@ -109,6 +116,7 @@ final class Generator
         - Leave a field empty ("") when the block reads better without it.
         - Do not invent facts that only the website owner can know — prices, opening hours, addresses, names, phone numbers, statistics. Write around them or phrase them generally.
         - Fields described as HTML may only use <p>, <strong>, <em>, <ul>, <ol> and <li>. Plain-text fields contain no markup; separate paragraphs there with a blank line.
+        - Where a block takes a photo, a stock photo is searched with the terms you give. Describe a plausible, concrete scene that supports the text (people, hands, objects, setting) rather than an abstract idea. Use one or two photo blocks on a page, not more.
 
         Also write a meta description for search engines: one or two sentences, at most 155 characters.
         PROMPT;
@@ -161,7 +169,10 @@ final class Generator
                 'markdown' => '. Markdown.',
                 default    => '. Plain text.',
             }],
-            'choice'    => ['type' => 'string', 'enum' => $spec['values'], 'description' => $label],
+            'image' => self::object([
+                'query' => ['type' => 'string', 'description' => 'English search terms for a stock photo, 2 to 5 words, describing a concrete, realistic scene.'],
+                'alt'   => ['type' => 'string', 'description' => 'Alt text for the photo in the page language: what the image shows, one sentence.'],
+            ], $label !== '' ? $label . ' (a stock photo is searched for it)' : null),
             'structure' => [
                 'type'        => 'array',
                 'description' => $label,

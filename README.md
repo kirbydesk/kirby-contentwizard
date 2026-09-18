@@ -18,7 +18,13 @@ the blocks that are enabled in the project.
   Use [kirby-translatewizard](https://github.com/kirbydesk/kirby-translatewizard)
   for the other languages.
 
-Blocks that need files, links or icons (e.g. media, buttons) are left
+**Photos from Pexels.** With a [Pexels API key](https://www.pexels.com/api/),
+media blocks are included: Claude describes a fitting scene, the plugin
+searches Pexels, adds the photo to the page and fills alt text and the
+credit fields (photographer, credit line, source, Pexels License).
+Without a key, media blocks are left out.
+
+Blocks that need links or other files (e.g. buttons, videos) are left
 out — Claude cannot provide them. Add those in the panel afterwards.
 
 ## Requirements
@@ -43,8 +49,17 @@ return [
             'apiKey' => 'sk-ant-…',
         ],
 
+        // optional — stock photos for media blocks
+        'pexels' => [
+            'apiKey' => '…',
+        ],
+
         // optional — default: claude-opus-5
         'model' => 'claude-opus-5',
+
+        // optional — block types the generator never uses
+        // default: ['pwmulticolumn'] (column layouts are arranged by hand)
+        'exclude' => ['pwmulticolumn'],
 
         // optional — describes the website (topic, audience, voice);
         // sent along with every request
@@ -53,8 +68,8 @@ return [
 ];
 ```
 
-Without `anthropic.apiKey`, the `ANTHROPIC_API_KEY` environment variable
-is used. Keep the key out of version control (e.g. in an env file or a
+Without `anthropic.apiKey` / `pexels.apiKey`, the environment variables
+`ANTHROPIC_API_KEY` / `PEXELS_API_KEY` are used. Keep the key out of version control (e.g. in an env file or a
 git-ignored config).
 
 With `claude-opus-5`, server-side refusal fallbacks are enabled: if the
@@ -95,3 +110,4 @@ composer install   # installs the Anthropic PHP SDK into vendor/
 - `src/BlockCatalog.php` — reads enabled blocks and their content fields
 - `src/Generator.php` — builds prompt + JSON schema, calls Claude (streaming)
 - `src/BlockBuilder.php` — turns the answer into Kirby block data with blueprint defaults
+- `src/Pexels.php` — finds a photo and adds it to the page with credit fields

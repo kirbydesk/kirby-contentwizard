@@ -28,21 +28,31 @@ use Throwable;
  *     'fields' => [name => field spec],
  *   ]
  *
- * Field spec `kind`: pwtext | pweditor | text | html | structure | choice | blocks
+ * Field spec `kind`: pwtext | pweditor | text | textarea | html | structure | blocks | image
  */
 final class BlockCatalog
 {
-    /** Field types that make a whole block unusable for the generator. */
-    private const BLOCKING_TYPES = ['files', 'link', 'url'];
+    /** Required fields of these types make a whole block unusable. */
+    private const BLOCKING_TYPES = ['link', 'url'];
 
-    /** Field types that are skipped silently (defaults are kept). */
-    private const IGNORED_TYPES = ['headline', 'hidden', 'info', 'line', 'gap', 'pwalign', 'pwicon', 'toggle', 'multiselect', 'color', 'range', 'number'];
+    /**
+     * Field types that are skipped silently (defaults are kept). Choice
+     * fields are presentation (alignment, size, style) and stay on the
+     * project defaults; they would also bloat the response schema.
+     */
+    private const IGNORED_TYPES = ['headline', 'hidden', 'info', 'line', 'gap', 'pwalign', 'pwicon', 'toggle', 'toggles', 'select', 'radio', 'multiselect', 'color', 'range', 'number', 'link', 'url'];
 
     /** Nested blocks deeper than this are not described. */
     private const MAX_DEPTH = 3;
 
+    /**
+     * @param list<string> $exclude Block types the generator must not use
+     * @param bool $images Whether single-image fields can be filled (Pexels)
+     */
     public function __construct(
         private readonly ModelWithContent $model,
+        private readonly array $exclude = [],
+        private readonly bool $images = false,
     ) {
     }
 
@@ -59,6 +69,7 @@ final class BlockCatalog
         try {
             $entries = [];
             foreach (pwConfig::projectConfig('blocks') as $type) {
+                if (in_array($type, $this->exclude, true)) continue;
                 $entry = $this->describe($type, 1);
                 if ($entry !== null) $entries[] = $entry;
             }
@@ -97,19 +108,30 @@ final class BlockCatalog
             return null;
         }
 
-        $fields = [];
+        $fields   = [];
+        $hasFiles = false;
         foreach ($this->contentFields($type) as $name => $field) {
             $fieldType = $field['type'] ?? 'text';
 
-            if (in_array($fieldType, self::BLOCKING_TYPES, true)) return null;
+            if (in_array($fieldType, self::BLOCKING_TYPES, true) && !empty($field['required'])) return null;
             if (in_array($fieldType, self::IGNORED_TYPES, true)) continue;
+
+            if ($fieldType === 'files') {
+                $hasFiles = true;
+                if ($this->images && self::isSingleImage($field)) {
+                    $fields[$name] = ['kind' => 'image', 'label' => self::english($field['label'] ?? null), 'required' => false];
+                }
+                continue;
+            }
 
             $spec = $this->fieldSpec($field, $depth);
             if ($spec !== null) $fields[$name] = $spec;
         }
 
-        // A block without anything to write is of no use.
+        // A block without anything to write is of no use — and a media
+        // block whose files cannot be filled would stay empty.
         if ($fields === []) return null;
+        if ($hasFiles && !in_array('image', array_column($fields, 'kind'), true)) return null;
 
         $nameKey = is_string($props['name'] ?? null) ? $props['name'] : null;
 
@@ -134,21 +156,20 @@ final class BlockCatalog
             'text', 'slug', 'email', 'tel' => $base + ['kind' => 'text'],
             'textarea' => $base + ['kind' => 'textarea'],
             'writer'   => $base + ['kind' => 'html'],
-            'toggles', 'select', 'radio' => $this->choiceSpec($field, $base),
             'structure' => $this->structureSpec($field, $base),
             'blocks'    => $this->blocksSpec($field, $base, $depth),
             default     => null,
         };
     }
 
-    private function choiceSpec(array $field, array $base): ?array
+    /** A files field that takes exactly one image. */
+    private static function isSingleImage(array $field): bool
     {
-        $values = [];
-        foreach ($field['options'] ?? [] as $option) {
-            $value = is_array($option) ? ($option['value'] ?? null) : $option;
-            if (is_string($value) || is_int($value)) $values[] = (string) $value;
-        }
-        return $values === [] ? null : $base + ['kind' => 'choice', 'values' => $values];
+        if (($field['multiple'] ?? true) !== false && ($field['max'] ?? null) !== 1) return false;
+
+        $accept   = (string) ($field['uploads']['accept'] ?? '');
+        $template = (string) ($field['uploads']['template'] ?? '');
+        return str_contains($accept, '.jpg') || str_contains($template, 'Image');
     }
 
     /** Structures whose sub-fields are all plain text (e.g. list items). */

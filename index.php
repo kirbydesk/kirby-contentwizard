@@ -8,6 +8,7 @@ use Kirby\Exception\PermissionException;
 use Kirbydesk\Contentwizard\BlockBuilder;
 use Kirbydesk\Contentwizard\BlockCatalog;
 use Kirbydesk\Contentwizard\Generator;
+use Kirbydesk\Contentwizard\Pexels;
 
 @include_once __DIR__ . '/vendor/autoload.php';
 // PSR-4 fallback for local (unlinked) install
@@ -31,6 +32,13 @@ Kirby::plugin('kirbydesk/contentwizard', [
     'options' => [
         'anthropic.apiKey' => null,
         'model'            => 'claude-opus-5',
+
+        // Optional: Pexels API key. With it, media blocks get stock photos.
+        'pexels.apiKey' => null,
+
+        // Block types the generator never uses. Multi-column layouts make
+        // the response schema too large and are better arranged by hand.
+        'exclude' => ['pwmulticolumn'],
 
         // Optional description of the website (topic, audience, voice)
         // that is sent along with every request.
@@ -129,7 +137,9 @@ Kirby::plugin('kirbydesk/contentwizard', [
                             @set_time_limit(300);
 
                             $language = $kirby->defaultLanguage() ?? $kirby->language();
-                            $catalog  = new BlockCatalog($model);
+                            $pexelsKey = $kirby->option('kirbydesk.contentwizard.pexels.apiKey') ?: getenv('PEXELS_API_KEY');
+                            $pexels    = is_string($pexelsKey) && $pexelsKey !== '' ? new Pexels($pexelsKey) : null;
+                            $catalog   = new BlockCatalog($model, (array) $kirby->option('kirbydesk.contentwizard.exclude', []), $pexels !== null);
 
                             $result = (new Generator($apiKey, (string) $kirby->option('kirbydesk.contentwizard.model', 'claude-opus-5')))
                                 ->generate($catalog->blocks(), [
@@ -139,7 +149,7 @@ Kirby::plugin('kirbydesk/contentwizard', [
                                     'project'  => $kirby->option('kirbydesk.contentwizard.project'),
                                 ], $brief);
 
-                            $blocks = (new BlockBuilder($model, $catalog))->build($result['blocks']);
+                            $blocks = $generatedBlocks = (new BlockBuilder($model, $catalog, $pexels, $language?->code()))->build($result['blocks']);
 
                             if ($mode === 'append') {
                                 $existing = $model->content()->get('blocks')->toBlocks()->toArray();
@@ -158,7 +168,7 @@ Kirby::plugin('kirbydesk/contentwizard', [
                             return [
                                 'event'   => 'model.update',
                                 'message' => tt('contentwizard.result.done', '{count} block(s) created.', [
-                                    'count' => count($result['blocks']),
+                                    'count' => count($generatedBlocks),
                                 ]),
                             ];
                         },
