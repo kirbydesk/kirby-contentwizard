@@ -1,0 +1,33 @@
+{
+	"name": "kirbydesk/kirby-contentwizard",
+	"version": "1.0.0",
+	"description": "AI page generator for Kirby CMS",
+	"type": "kirby-plugin",
+	"keywords": [
+		"kirby",
+		"kirby-plugin",
+		"contentwizard"
+	],
+	"license": "proprietary",
+	"homepage": "https://github.com/kirbydesk/kirby-contentwizard",
+	"authors": [
+		{
+			"name": "Christian Fickinger",
+			"email": "hello@kirbydesk.com",
+			"homepage": "https://kirbydesk.com"
+		}
+	],
+	"extra": {
+		"installer-name": "kirby-contentwizard"
+	},
+	"autoload": {
+		"psr-4": {
+			"Kirbydesk\\Contentwizard\\": "src/"
+		}
+	},
+	"require": {
+		"getkirby/composer-installer": "^1.2",
+		"kirbydesk/kirby-pagewizard": "^1.1.51",
+		"anthropic-ai/sdk": "^0.49.0"
+	}
+}
