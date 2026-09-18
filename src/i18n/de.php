@@ -28,4 +28,9 @@
 	'contentwizard.settings.backgroundTheme' => 'Theme auf dem Hintergrund',
 	'contentwizard.settings.backgroundTheme.help' => 'Automatisch: das Theme, dessen Text auf dem Video oder Bild am besten lesbar ist (gemessene Helligkeit, abgedunkelt durch das Overlay).',
 	'contentwizard.settings.auto' => 'Automatisch (bester Kontrast)',
+
+	'contentwizard.secret.anthropic' => 'Anthropic-API-Key',
+	'contentwizard.secret.anthropic.help' => 'Für „Seite mit KI erstellen“. Anlegen unter console.anthropic.com.',
+	'contentwizard.secret.pexels' => 'Pexels-API-Key',
+	'contentwizard.secret.pexels.help' => 'Optional: Hintergrundvideos und Kartenfotos. Kostenlos unter pexels.com/api.',
 ];

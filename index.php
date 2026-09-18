@@ -31,9 +31,15 @@ function _contentwizard_supports($model): bool
     return $model instanceof Page && $model->blueprint()->field('blocks') !== null;
 }
 
+/**
+ * API key: plugin option (config.php) first, then the project's .env
+ * (managed in the Project Wizard), then the process environment.
+ */
 function _contentwizard_key(string $option, string $env): ?string
 {
-    $key = App::instance()->option('kirbydesk.contentwizard.' . $option) ?: getenv($env);
+    $key = App::instance()->option('kirbydesk.contentwizard.' . $option)
+        ?: (class_exists('pwSecrets') ? pwSecrets::get($env) : '')
+        ?: getenv($env);
     return is_string($key) && $key !== '' ? $key : null;
 }
 
@@ -145,6 +151,22 @@ Kirby::plugin('kirbydesk/contentwizard', [
 
         // Everything else — voice, rules, blocks, themes, background —
         // is set per project in the Project Wizard ("AI" tab).
+
+        // Keys the Project Wizard can manage in the project's .env.
+        'secrets' => fn () => [
+            [
+                'env'    => 'ANTHROPIC_API_KEY',
+                'option' => 'anthropic.apiKey',
+                'label'  => t('contentwizard.secret.anthropic', 'Anthropic API key'),
+                'help'   => t('contentwizard.secret.anthropic.help', 'For “Create page with AI”. Create one at console.anthropic.com.'),
+            ],
+            [
+                'env'    => 'PEXELS_API_KEY',
+                'option' => 'pexels.apiKey',
+                'label'  => t('contentwizard.secret.pexels', 'Pexels API key'),
+                'help'   => t('contentwizard.secret.pexels.help', 'Optional: background videos and card photos. Free at pexels.com/api.'),
+            ],
+        ],
 
         // Entry for pagewizard's shared "AI" view button. Pages are
         // written in the default language; translatewizard handles the rest.

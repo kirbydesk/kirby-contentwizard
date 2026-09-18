@@ -56,9 +56,12 @@ return [
 ];
 ```
 
-Without the keys, the environment variables `ANTHROPIC_API_KEY` /
-`PEXELS_API_KEY` are used. Keep them out of version control (e.g. in a
-git-ignored `.env`).
+Easier: manage the keys in the panel under **Project Wizard → AI →
+Access keys** (admins only). They are written to the project's `.env`
+(next to the `site` folder) as `ANTHROPIC_API_KEY` / `PEXELS_API_KEY`,
+never shown again in full, and stay out of the content deploy and git.
+Order of precedence: plugin option in `config.php`, then `.env`, then
+the process environment.
 
 With `claude-opus-5`, server-side refusal fallbacks are enabled: if the
 model declines a request, the API retries it on a fallback model.

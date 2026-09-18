@@ -28,4 +28,9 @@
 	'contentwizard.settings.backgroundTheme' => 'Theme on the background',
 	'contentwizard.settings.backgroundTheme.help' => 'Automatic: the theme whose text reads best on the video or photo (its measured brightness, darkened by the overlay).',
 	'contentwizard.settings.auto' => 'Automatic (best contrast)',
+
+	'contentwizard.secret.anthropic' => 'Anthropic API key',
+	'contentwizard.secret.anthropic.help' => 'For “Create page with AI”. Create one at console.anthropic.com.',
+	'contentwizard.secret.pexels' => 'Pexels API key',
+	'contentwizard.secret.pexels.help' => 'Optional: background videos and card photos. Free at pexels.com/api.',
 ];
