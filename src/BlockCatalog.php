@@ -29,6 +29,7 @@ use Throwable;
  *   ]
  *
  * Field spec `kind`: pwtext | pweditor | text | textarea | html | structure | blocks | image
+ * | background (pseudo field "_background": video/image behind the block)
  */
 final class BlockCatalog
 {
@@ -42,8 +43,14 @@ final class BlockCatalog
      */
     private const IGNORED_TYPES = ['headline', 'hidden', 'info', 'line', 'gap', 'pwalign', 'pwicon', 'toggle', 'toggles', 'select', 'radio', 'multiselect', 'color', 'range', 'number', 'link', 'url'];
 
+    /** Pseudo field for a block's background video/image (style tab). */
+    public const BACKGROUND = '_background';
+
     /** Nested blocks deeper than this are not described. */
     private const MAX_DEPTH = 3;
+
+    /** @var array<string, array|null> described entries by block type */
+    private array $entries = [];
 
     /**
      * @param list<string> $exclude Block types the generator must not use
@@ -88,6 +95,24 @@ final class BlockCatalog
         return $fieldset?->tabs()['content']['fields'] ?? [];
     }
 
+    /** Catalog entry of a (nested) block type described by blocks(). */
+    public function entry(string $type): ?array
+    {
+        return $this->entries[$type] ?? null;
+    }
+
+    /** All fields of a block type across tabs (Kirby field props). */
+    public function allFields(string $type): array
+    {
+        return $this->fieldset($type)?->fields() ?? [];
+    }
+
+    /** Background spec of a block type, or null. */
+    public function backgroundOf(string $type): ?array
+    {
+        return $this->backgroundSpec($type);
+    }
+
     private function fieldset(string $type): ?Fieldset
     {
         try {
@@ -101,7 +126,11 @@ final class BlockCatalog
     private function describe(string $type, int $depth): ?array
     {
         if ($depth > self::MAX_DEPTH) return null;
+        return $this->entries[$type] = $this->build($type, $depth);
+    }
 
+    private function build(string $type, int $depth): ?array
+    {
         try {
             $props = Blueprint::find('blocks/' . $type);
         } catch (Throwable) {
@@ -133,6 +162,21 @@ final class BlockCatalog
         if ($fields === []) return null;
         if ($hasFiles && !in_array('image', array_column($fields, 'kind'), true)) return null;
 
+        if ($this->images) {
+            // Single images outside the content tab (e.g. a card's image
+            // in the style tab) are decoration: filled when possible.
+            foreach ($this->fieldset($type)?->fields() ?? [] as $name => $field) {
+                if (isset($fields[$name]) || ($field['type'] ?? null) !== 'files') continue;
+                if (!empty($field['when']) || !self::isSingleImage($field)) continue;
+                if (array_key_exists($name, $this->contentFields($type))) continue;
+                $fields[$name] = ['kind' => 'image', 'label' => self::english($field['label'] ?? null), 'required' => false, 'optional' => true];
+            }
+
+            if (($background = $this->backgroundSpec($type)) !== null) {
+                $fields[self::BACKGROUND] = $background;
+            }
+        }
+
         $nameKey = is_string($props['name'] ?? null) ? $props['name'] : null;
 
         return [
@@ -160,6 +204,26 @@ final class BlockCatalog
             'blocks'    => $this->blocksSpec($field, $base, $depth),
             default     => null,
         };
+    }
+
+    /**
+     * pagewizard's background pattern (e.g. hero, style tab): a
+     * `backgroundtype` toggle plus files fields shown for "video" / "image".
+     */
+    private function backgroundSpec(string $type): ?array
+    {
+        $all = $this->fieldset($type)?->fields() ?? [];
+        if (($all['backgroundtype']['type'] ?? null) !== 'toggles') return null;
+
+        $spec = ['kind' => 'background', 'label' => 'Background', 'required' => false, 'typeField' => 'backgroundtype'];
+        foreach ($all as $name => $field) {
+            if (($field['type'] ?? null) !== 'files') continue;
+            $when = array_change_key_case($field['when'] ?? []);
+            if (($when['backgroundtype'] ?? null) === 'video') $spec['video'] = $name;
+            if (($when['backgroundtype'] ?? null) === 'image') $spec['image'] = $name;
+        }
+
+        return isset($spec['video']) || isset($spec['image']) ? $spec : null;
     }
 
     /** A files field that takes exactly one image. */

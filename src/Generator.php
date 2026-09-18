@@ -9,23 +9,36 @@ use Anthropic\Client;
 use RuntimeException;
 
 /**
- * Asks Claude for a page built from the project's blocks. The block
- * catalog becomes a JSON schema (structured output), so the answer can
- * only contain blocks and fields that exist in this project.
+ * Asks Claude for a page built from the project's blocks.
+ *
+ * The response schema is deliberately flat: one block object with a
+ * `type` enum and the union of all fields (tagline, heading, editor,
+ * items, image, background, …). Which block uses which field — and what
+ * each block is for — is described in the system prompt. A schema with
+ * one variant per block type grows with every block and quickly exceeds
+ * the size limit of structured outputs; the flat one stays small.
+ * BlockBuilder takes from each block only the fields its type has.
  *
  * Result shape:
  *   [
  *     'metadescription' => '…',
- *     'blocks' => [['type' => 'pwsteplist', 'content' => [...]], …],
+ *     'blocks' => [['type' => 'pwsteplist', 'heading' => '…', 'items' => [...], …], …],
  *   ]
  */
 final class Generator
 {
+    /** Keys of the flat block object for list, image and background fields. */
+    public const ITEMS      = 'items';
+    public const IMAGE      = 'image';
+    public const BACKGROUND = 'background';
+
     /** Token usage of the last request: input, output (for logging/cost). */
     public array $usage = [];
 
     /** Models that support server-side refusal fallbacks ("default" routing). */
     private const FALLBACK_MODELS = ['claude-opus-5', 'claude-fable-5-1'];
+
+    private const RICH = ['pweditor', 'html', 'textarea'];
 
     public function __construct(
         private readonly string $apiKey,
@@ -44,7 +57,7 @@ final class Generator
         $params = [
             'model'        => $this->model,
             'maxTokens'    => 32000,
-            'system'       => $this->systemPrompt($page),
+            'system'       => $this->systemPrompt($catalog, $page),
             'messages'     => [['role' => 'user', 'content' => $brief]],
             'outputConfig' => [
                 'format' => [
@@ -92,7 +105,11 @@ final class Generator
         return $result;
     }
 
-    private function systemPrompt(array $page): string
+    /* ---------------------------------------------------------------- */
+    /*  Prompt                                                          */
+    /* ---------------------------------------------------------------- */
+
+    private function systemPrompt(array $catalog, array $page): string
     {
         $location = $page['path'] === []
             ? 'It is a top-level page.'
@@ -102,26 +119,70 @@ final class Generator
             ? "\n\n<project>\n" . trim($page['project']) . "\n</project>\nWrite in line with this description of the website and its voice."
             : '';
 
+        $blocks = implode("\n", array_map(fn ($entry) => $this->describeBlock($entry), $catalog));
+
         return <<<PROMPT
         You write the content of a web page for a website built with Kirby CMS and the pagewizard block system.
 
         The page is titled "{$page['title']}". {$location}
         Write all text in this language: {$page['language']}.{$project}
 
-        The editor describes what the page should be about. Turn that into a well-structured page made of the available blocks — the response schema lists every block type and field that exists on this website, each with a description of what it is for. Pick the block that fits the content: a sequence of steps belongs in a step list, a set of benefits or features in a feature list, and so on. Plain text blocks are for running text. Use as many blocks as the topic needs, typically four to eight, and vary them where it helps the reader.
+        The editor describes what the page should be about. Turn that into a well-structured page made of the blocks below. Pick the block that fits the content: a sequence of steps belongs in a step list, a set of benefits or features in a feature list, and so on. Use as many blocks as the topic needs, typically four to eight, and vary them where it helps the reader.
+
+        <blocks>
+        {$blocks}
+        </blocks>
+
+        Every block in your answer has all fields of the response format. Fill only the fields its block type lists; set every other field to an empty string, an empty list, or an image/background with an empty query.
 
         Writing:
         - Clear, friendly, concrete web copy; short paragraphs.
         - Headings are short. Taglines are a few words that lead into the heading.
-        - Leave a field empty ("") when the block reads better without it.
+        - Leave a listed field empty when the block reads better without it.
+        - Short fields (marked "short") are plain text without markup. Rich-text fields (marked "rich text") are HTML using only <p>, <strong>, <em>, <ul>, <ol> and <li>.
         - Do not invent facts that only the website owner can know — prices, opening hours, addresses, names, phone numbers, statistics. Write around them or phrase them generally.
         - Never invent quotes, testimonials or reviews. Use a quote block only for a quote the editor provides in the description.
-        - Fields described as HTML may only use <p>, <strong>, <em>, <ul>, <ol> and <li>. Plain-text fields contain no markup; separate paragraphs there with a blank line.
-        - Where a block takes a photo, a stock photo is searched with the terms you give. Describe a plausible, concrete scene that supports the text (people, hands, objects, setting) rather than an abstract idea. Use one or two photo blocks on a page, not more. The photo is a generic stock image: the text around it must not claim that it shows the website owner, their team or their premises.
+        - For photos, give English search terms for a stock photo: a plausible, concrete scene that supports the text (people, hands, objects, setting), a different scene for each photo on the page. Use at most one or two media blocks per page. The photos are generic stock images: the text around them must not claim that they show the website owner, their team or their premises.
+        - A background is a short, calm stock video behind the opening block's text; give English search terms for footage that sets the mood of the topic.
 
         Also write a meta description for search engines: one or two sentences, at most 155 characters.
         PROMPT;
     }
+
+    private function describeBlock(array $entry): string
+    {
+        $line = '- ' . $entry['type'] . ' (' . $entry['label'] . ')';
+        if (!empty($entry['hint'])) $line .= ': ' . rtrim($entry['hint'], '.') . '.';
+
+        return $line . "\n  Fields: " . implode('; ', $this->describeFields($entry)) . '.';
+    }
+
+    /** @return list<string> */
+    private function describeFields(array $entry, bool $nested = false): array
+    {
+        $parts = [];
+        foreach ($entry['fields'] as $name => $spec) {
+            $label = $spec['label'] !== null && strcasecmp($spec['label'], $name) !== 0 ? ' — ' . $spec['label'] : '';
+
+            $parts[] = match ($spec['kind']) {
+                'pwtext', 'text' => $name . ' (short' . $label . ')',
+                'pweditor', 'html', 'textarea' => $name . ' (rich text' . $label . ')',
+                'structure'  => ($nested ? $name : self::ITEMS) . ' (list of entries with ' . implode(', ', array_keys($spec['columns'])) . ')',
+                'blocks'     => self::ITEMS . ' (list of ' . implode(' or ', array_map(
+                    fn ($sub) => $sub['label'] . ' entries with ' . implode(', ', $this->describeFields($sub, true)),
+                    $spec['blocks']
+                )) . ')',
+                'image'      => self::IMAGE . ' (photo' . (!empty($spec['optional']) ? ', optional' : '') . ')',
+                'background' => self::BACKGROUND . ' (video behind the text)',
+                default      => $name,
+            };
+        }
+        return $parts;
+    }
+
+    /* ---------------------------------------------------------------- */
+    /*  Schema                                                          */
+    /* ---------------------------------------------------------------- */
 
     /**
      * @param list<array> $catalog
@@ -136,70 +197,70 @@ final class Generator
             'blocks' => [
                 'type'        => 'array',
                 'description' => 'The blocks of the page, top to bottom.',
-                'items'       => ['anyOf' => array_map(fn ($entry) => $this->blockSchema($entry), $catalog)],
+                'items'       => $this->flatObject($catalog, true),
             ],
         ]);
     }
 
-    private function blockSchema(array $entry): array
+    /**
+     * One object with the union of all fields of the given entries.
+     */
+    private function flatObject(array $entries, bool $withType): array
     {
         $properties = [];
-        foreach ($entry['fields'] as $name => $spec) {
-            $properties[$name] = $this->fieldSchema($spec);
+        if ($withType) {
+            $properties['type'] = ['type' => 'string', 'enum' => array_values(array_unique(array_column($entries, 'type')))];
         }
 
-        $description = $entry['label'];
-        if (!empty($entry['hint'])) $description .= ' — ' . $entry['hint'];
+        $items = [];
+        $columns = [];
+        foreach ($entries as $entry) {
+            foreach ($entry['fields'] as $name => $spec) {
+                switch ($spec['kind']) {
+                    case 'image':
+                        $properties[self::IMAGE] = self::media('photo');
+                        break;
+                    case 'background':
+                        $properties[self::BACKGROUND] = self::media('background video');
+                        break;
+                    case 'blocks':
+                        array_push($items, ...$spec['blocks']);
+                        break;
+                    case 'structure':
+                        $columns += $spec['columns'];
+                        break;
+                    default:
+                        $properties[$name] ??= ['type' => 'string'];
+                }
+            }
+        }
 
-        return self::object([
-            'type'    => ['type' => 'string', 'const' => $entry['type']],
-            'content' => self::object($properties),
-        ], $description);
+        if ($items !== []) {
+            $types = array_unique(array_column($items, 'type'));
+            $properties[self::ITEMS] = ['type' => 'array', 'items' => $this->flatObject($items, count($types) > 1)];
+        } elseif ($columns !== []) {
+            $properties[self::ITEMS] = ['type' => 'array', 'items' => self::object(array_map(fn () => ['type' => 'string'], $columns))];
+        }
+
+        return self::object($properties);
     }
 
-    private function fieldSchema(array $spec): array
+    private static function media(string $what): array
     {
-        $label = $spec['label'] ?? '';
-
-        return match ($spec['kind']) {
-            'pwtext', 'text' => ['type' => 'string', 'description' => trim($label . '. Plain text, no markup.', ' .')],
-            'textarea'       => ['type' => 'string', 'description' => $label . '. Plain text.'],
-            'html'           => ['type' => 'string', 'description' => $label . '. HTML.'],
-            'pweditor'       => ['type' => 'string', 'description' => $label . match ($spec['mode']) {
-                'writer'   => '. HTML.',
-                'markdown' => '. Markdown.',
-                default    => '. Plain text.',
-            }],
-            'image' => self::object([
-                'query' => ['type' => 'string', 'description' => 'English search terms for a stock photo, 2 to 5 words, describing a concrete, realistic scene.'],
-                'alt'   => ['type' => 'string', 'description' => 'Alt text for the photo in the page language: what the image shows, one sentence.'],
-            ], $label !== '' ? $label . ' (a stock photo is searched for it)' : null),
-            'structure' => [
-                'type'        => 'array',
-                'description' => $label,
-                'items'       => self::object(array_map(
-                    fn ($column) => ['type' => 'string', 'description' => (string) $column],
-                    $spec['columns']
-                )),
-            ],
-            'blocks' => [
-                'type'        => 'array',
-                'description' => $label,
-                'items'       => ['anyOf' => array_map(fn ($entry) => $this->blockSchema($entry), $spec['blocks'])],
-            ],
-        };
+        return self::object([
+            'query' => ['type' => 'string', 'description' => 'English search terms for a stock ' . $what . ', 2 to 5 words; empty if none.'],
+            'alt'   => ['type' => 'string', 'description' => 'What it shows, one sentence in the page language.'],
+        ]);
     }
 
     /** Strict object: every property required, nothing else allowed. */
-    private static function object(array $properties, ?string $description = null): array
+    private static function object(array $properties): array
     {
-        $schema = [
+        return [
             'type'                 => 'object',
             'properties'           => $properties,
             'required'             => array_keys($properties),
             'additionalProperties' => false,
         ];
-        if ($description !== null) $schema['description'] = $description;
-        return $schema;
     }
 }

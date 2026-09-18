@@ -10,15 +10,21 @@ use Kirby\Toolkit\Str;
 use Throwable;
 
 /**
- * Finds a photo on Pexels and adds it to a page as a pagewizard image
- * file (template `pwImage`), including alt text and the credit fields
- * of the legal tab (photographer, credit line, source, Pexels License).
+ * Finds a photo or a short video on Pexels and adds it to a page as a
+ * pagewizard file (`pwImage`, `pwBackgroundimage`, `pwVideo`), including
+ * alt text / title and the credit fields of the legal tab (creator,
+ * credit line, source, Pexels License).
  *
  * https://www.pexels.com/api/documentation/
  */
 final class Pexels
 {
-    private const SEARCH = 'https://api.pexels.com/v1/search';
+    private const SEARCH       = 'https://api.pexels.com/v1/search';
+    private const VIDEO_SEARCH = 'https://api.pexels.com/videos/search';
+
+    /** Background videos: short clips at about this width keep files small. */
+    private const VIDEO_MAX_DURATION = 30;
+    private const VIDEO_WIDTH        = 1280;
 
     public function __construct(
         private readonly string $apiKey,
@@ -30,38 +36,88 @@ final class Pexels
      * Returns null when nothing suitable is found or the download fails —
      * the caller then leaves the image out.
      */
-    public function attach(Page $page, string $query, string $alt, string $language): ?File
+    public function attach(Page $page, string $query, string $alt, string $language, string $template = 'pwImage'): ?File
     {
-        $photo = $this->search($query);
+        $photo = $this->search(self::SEARCH, $query, 'photos')[0] ?? null;
         if ($photo === null) return null;
 
         $url = $photo['src']['large2x'] ?? $photo['src']['large'] ?? null;
         if (!is_string($url)) return null;
 
+        $creator = (string) ($photo['photographer'] ?? '');
+
+        return $this->store($page, $url, Str::slug($query) . '-pexels-' . ($photo['id'] ?? uniqid()) . '.jpg', $template, [
+            'imagetitle'       => $alt,
+            'imagedescription' => $alt,
+            'imagetype'        => 'true',
+        ] + self::credit('Foto', $creator, $photo['url'] ?? null), $language);
+    }
+
+    /**
+     * Search for a short landscape video and attach an MP4 of about
+     * VIDEO_WIDTH pixels to $page (template `pwVideo`).
+     */
+    public function attachVideo(Page $page, string $query, string $title, string $language): ?File
+    {
+        $videos = $this->search(self::VIDEO_SEARCH, $query, 'videos', ['size' => 'medium']);
+
+        // Prefer short clips; fall back to any result.
+        usort($videos, fn ($a, $b) => (($a['duration'] ?? 99) > self::VIDEO_MAX_DURATION) <=> (($b['duration'] ?? 99) > self::VIDEO_MAX_DURATION));
+
+        foreach ($videos as $video) {
+            $file = self::videoFile($video['video_files'] ?? []);
+            if ($file === null) continue;
+
+            return $this->store($page, $file['link'], Str::slug($query) . '-pexels-' . ($video['id'] ?? uniqid()) . '.mp4', 'pwVideo', [
+                'videotitle'       => $title,
+                'videodescription' => $title,
+            ] + self::credit('Video', (string) ($video['user']['name'] ?? ''), $video['url'] ?? null), $language);
+        }
+
+        return null;
+    }
+
+    /** Smallest MP4 at least VIDEO_WIDTH wide, else the widest below it. */
+    private static function videoFile(array $files): ?array
+    {
+        $mp4 = array_values(array_filter($files, fn ($f) =>
+            ($f['file_type'] ?? '') === 'video/mp4' && is_string($f['link'] ?? null) && ($f['width'] ?? 0) > 0
+        ));
+        if ($mp4 === []) return null;
+
+        usort($mp4, fn ($a, $b) => $a['width'] <=> $b['width']);
+        foreach ($mp4 as $file) {
+            if ($file['width'] >= self::VIDEO_WIDTH && $file['width'] <= 1920) return $file;
+        }
+        $below = array_filter($mp4, fn ($f) => $f['width'] < self::VIDEO_WIDTH);
+        return $below !== [] ? end($below) : null;
+    }
+
+    private static function credit(string $kind, string $creator, ?string $url): array
+    {
+        return [
+            'mediacreator' => $creator,
+            'mediacredit'  => trim($kind . ': ' . $creator . ' / Pexels', ' /'),
+            'mediasource'  => 'Pexels – ' . ($url ?? 'https://www.pexels.com'),
+            'medialicense' => 'pexels-license',
+        ];
+    }
+
+    private function store(Page $page, string $url, string $filename, string $template, array $content, string $language): ?File
+    {
         $tmp = tempnam(sys_get_temp_dir(), 'pexels');
         try {
-            $response = Remote::get($url, ['timeout' => 30]);
+            $response = Remote::get($url, ['timeout' => 90]);
             if ($response->code() !== 200) return null;
             F::write($tmp, $response->content());
-
-            $photographer = (string) ($photo['photographer'] ?? '');
-            $filename     = Str::slug($query) . '-pexels-' . ($photo['id'] ?? uniqid()) . '.jpg';
 
             $file = $page->createFile([
                 'source'   => $tmp,
                 'filename' => $filename,
-                'template' => 'pwImage',
+                'template' => $template,
             ]);
 
-            return $file->update([
-                'imagetitle'       => $alt,
-                'imagedescription' => $alt,
-                'imagetype'        => 'true',
-                'mediacreator'     => $photographer,
-                'mediacredit'      => trim('Foto: ' . $photographer . ' / Pexels', ' /'),
-                'mediasource'      => 'Pexels – ' . ($photo['url'] ?? 'https://www.pexels.com'),
-                'medialicense'     => 'pexels-license',
-            ], $language);
+            return $file->update($content, $language);
         } catch (Throwable) {
             return null;
         } finally {
@@ -69,24 +125,25 @@ final class Pexels
         }
     }
 
-    private function search(string $query): ?array
+    /** @return list<array> */
+    private function search(string $endpoint, string $query, string $key, array $params = []): array
     {
         try {
-            $response = Remote::get(self::SEARCH . '?' . http_build_query([
+            $response = Remote::get($endpoint . '?' . http_build_query($params + [
                 'query'       => $query,
                 'orientation' => 'landscape',
-                'per_page'    => 5,
+                'per_page'    => 10,
             ]), [
                 'headers' => ['Authorization: ' . $this->apiKey],
                 'timeout' => 15,
             ]);
         } catch (Throwable) {
-            return null;
+            return [];
         }
 
-        if ($response->code() !== 200) return null;
+        if ($response->code() !== 200) return [];
 
-        $photos = $response->json()['photos'] ?? [];
-        return is_array($photos) && $photos !== [] ? $photos[0] : null;
+        $items = $response->json()[$key] ?? [];
+        return is_array($items) ? array_values($items) : [];
     }
 }

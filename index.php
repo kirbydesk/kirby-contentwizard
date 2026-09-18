@@ -40,6 +40,10 @@ Kirby::plugin('kirbydesk/contentwizard', [
         // the response schema too large and are better arranged by hand.
         'exclude' => ['pwmulticolumn'],
 
+        // Themes the generated sections alternate between (pagewizard
+        // theme values). An empty list keeps every block on its default.
+        'themes' => ['default', 'variant'],
+
         // Optional description of the website (topic, audience, voice)
         // that is sent along with every request.
         'project' => null,
@@ -149,7 +153,8 @@ Kirby::plugin('kirbydesk/contentwizard', [
                                     'project'  => $kirby->option('kirbydesk.contentwizard.project'),
                                 ], $brief);
 
-                            $blocks = $generatedBlocks = (new BlockBuilder($model, $catalog, $pexels, $language?->code()))->build($result['blocks']);
+                            $themes = (array) $kirby->option('kirbydesk.contentwizard.themes', []);
+                            $blocks = $generatedBlocks = (new BlockBuilder($model, $catalog, $pexels, $language?->code(), $themes))->build($result['blocks']);
 
                             if ($mode === 'append') {
                                 $existing = $model->content()->get('blocks')->toBlocks()->toArray();

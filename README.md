@@ -61,6 +61,10 @@ return [
         // default: ['pwmulticolumn'] (column layouts are arranged by hand)
         'exclude' => ['pwmulticolumn'],
 
+        // optional — themes the generated sections alternate between
+        // default: ['default', 'variant']; [] keeps the block defaults
+        'themes' => ['default', 'variant'],
+
         // optional — describes the website (topic, audience, voice);
         // sent along with every request
         'project' => 'Ergotherapy practice in Saarbrücken. We address parents and use a warm, professional tone.',
