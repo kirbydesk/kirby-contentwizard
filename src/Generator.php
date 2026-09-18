@@ -128,7 +128,7 @@ final class Generator
         The page is titled "{$page['title']}". {$location}
         Write all text in this language: {$page['language']}.{$project}
 
-        The editor describes what the page should be about. Turn that into a well-structured page made of the blocks below. Pick the block that fits the content: a sequence of steps belongs in a step list, a set of benefits or features in a feature list, and so on. Use as many blocks as the topic needs, typically four to eight, and vary them where it helps the reader.
+        The editor describes what the page should be about. Turn that into a well-structured page made of the blocks below. Pick the block that fits the content: a sequence of steps belongs in a step list, a set of benefits or features in a feature list, and so on. Use as many blocks as the topic needs, typically four to eight, and vary them where it helps the reader. A page of text only looks plain: where a block type takes photos (e.g. cards with an image each) and the content has several parallel topics, prefer it over a text-only list, so that most pages carry some imagery.
 
         <blocks>
         {$blocks}
