@@ -92,7 +92,7 @@ to `panel.viewButtons`:
 return [
     'panel' => [
         'viewButtons' => [
-            'page' => ['open', 'preview', '-', 'settings', 'ai', 'languages', 'status'],
+            'page' => ['open', '-', 'settings', 'ai', 'languages', 'status'],
         ],
     ],
 ];
